@@ -1,0 +1,2 @@
+SELECT FIELDS(Standard)
+FROM AnalyticsVisualization
