@@ -123,27 +123,28 @@ def interaction(request:HttpRequest):
         slack_channel = request_json.get("container", {}).get("channel_id")
         thread_ts = request_json.get("container", {}).get("thread_ts")
         slack_user_id = request_json.get("user", {}).get("id")
+        action_message_ts = request_json.get("message", {}).get("ts")
 
-        log_and_display_message(f"Action: { action_id } in channel { slack_channel } with thread_ts { thread_ts }")
+        log_and_display_message(f"Action: { action_id } in channel { slack_channel } with original thread_ts { thread_ts }. Action message ts: { action_message_ts }")
 
         # Routing based on action_id
-        if action_id == "answer_im_data_question":
+        if action_id == "rebuild_core_viz_in_next":
             log_and_display_message(f"{ action_id }: { action_value }")
-            # Action value naming convention: "data_question_id:entity_id"
-            data_question_id, entity_id = action_value.split(":")
+            # Action value naming convention: "core_viz_luid" (no split with a:b:etc)
+            core_viz_luid = action_value
             try:
                 kwargs_for_task = {
                     "slack_channel": slack_channel,
                     "thread_ts": thread_ts,
-                    "slack_user_id": slack_user_id
+                    "slack_user_id": slack_user_id,
+                    "action_message_ts": action_message_ts
                 }
-                # task_result = tasks.respond_to_data_question_part_deux_task(data_question_id=int(data_question_id), entity_id=int(entity_id), kwargs=kwargs_for_task)
+                task_result = tasks.rebuild_core_viz_in_next(core_viz_luid=core_viz_luid, kwargs=kwargs_for_task)
             except Exception as e:
                 error_message = f"Failed to start async task:\n\t{e}\n\t{traceback.format_exc}"
                 log_and_display_message(error_message, level="error")
             else:
-                # log_and_display_message(f"Started async task { task_result } to respond to data question.")
-                log_and_display_message(f"Started async task <TO DO> to respond to data question.")
+                log_and_display_message(f"Started async task { task_result } to rebuild core viz in next.")
 
     response = JsonResponse({ "message": "Interaction received" })
     return response

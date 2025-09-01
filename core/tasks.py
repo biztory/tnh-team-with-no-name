@@ -21,15 +21,11 @@ def respond_to_data_question_task(source:str, question:str, kwargs:dict) -> Asyn
     """
     return async_task("core.functions.ask_your_data.respond_to_data_question", source=source, question=question, kwargs=kwargs)
 
-def respond_to_data_question_part_deux_task(data_question_id:int, entity_id:int, kwargs:dict) -> AsyncTask:
+def rebuild_core_viz_in_next(core_viz_luid:str, kwargs:dict) -> AsyncTask:
     """
-    Part two of responding to a data question from a user in "Slack", "Teams", or "Google Chat". This means that in the first part, the user has been presented with a list of data sets to answer the question with, and now they have chosen one. This was stored as a DataQuestion object in the database, and now we need to process it.
-
-    As a next step, we're going to pick up the DataQuestion, and use the information in it as well as the data set to answer the question.
-
-    Kwargs is a dictionary containing additional information that may vary depending on the source. For example, in Slack, it may contain the Channel ID and thread we'll use to respond.
+    Take an existing viz in Tableau Core, identify its data source, and if the data is available in Tableau Next, attempt to rebuild the viz there.
     """
-    return async_task("ask_your_data.functions.respond_to_data_question_part_deux", data_question_id=data_question_id, entity_id=entity_id, kwargs=kwargs)
+    return async_task("core.functions.ask_your_data.rebuild_core_viz_in_next", core_viz_luid=core_viz_luid, kwargs=kwargs)
 
 def test_task():
     with open("test_task.txt", "a") as f:

@@ -110,10 +110,29 @@ def post_message(slack_channel:str, slack_credential:SlackCredential, text:str=N
             return slack_webclient.chat_postMessage(channel=slack_channel, text=text, blocks=blocks, thread_ts=thread_ts)
     else: # Then it has to be text
         if icon_emoji is not None:
-            return slack_webclient.chat_postMessage(channel=slack_channel, text=text, icon_emoji=icon_emoji, thread_ts=thread_ts)
+            return slack_webclient.chat_postMessage(channel=slack_channel, markdown_text=text, icon_emoji=icon_emoji, thread_ts=thread_ts)
         else:
-            return slack_webclient.chat_postMessage(channel=slack_channel, text=text, thread_ts=thread_ts)
+            return slack_webclient.chat_postMessage(channel=slack_channel, markdown_text=text, thread_ts=thread_ts)
     
+
+def update_message(slack_channel:str, slack_credential:SlackCredential, text:str=None, blocks:list=[], thread_ts:str=None) -> dict:
+    """
+    Update a message on Slack, and return the JSON/dict response from the Slack API.
+    """
+
+    if text is None and len(blocks) == 0:
+        raise Exception("No text or blocks provided to update_message.")
+
+    log_and_display_message(f"Connecting to Slack workspace and updating message with ts { thread_ts } in channel: { slack_channel }.")
+    slack_webclient = slack_sdk.WebClient(token=slack_credential.slack_workspace_bot_user_access_token)
+
+    if blocks and len(blocks) > 0:
+        return slack_webclient.chat_update(channel=slack_channel, text=text, blocks=blocks, ts=thread_ts)
+    else: # Then it has to be text
+        return slack_webclient.chat_update(channel=slack_channel, text=text, ts=thread_ts)
+    
+
+
 def post_status_message(slack_channel:str, slack_credential:SlackCredential, previous_status_message_ts:str=None, thread_ts:str=None, text:str=None, icon_emoji:str=":thinkspin:") -> dict:
     """
     Post a "status message" to a Slack channel. The intended use is the have a message that is updated with the current status of a task, such as "thinking", "processing", etc. When the status is updated by calling the function again, the previous message is deleted and replaced with the new one, seemingly in-place.

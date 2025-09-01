@@ -207,8 +207,7 @@ def post_visualization(connection_dict: dict, visualization_definition) -> dict:
     response = connection_dict["session"].post(connect_api_post_visualization_url, json=visualization_definition)
 
     if response.status_code != 201:
-        log_and_display_message(f"Error posting visualization: {response.status_code} - {response.text}")
-        return {}
+        raise Exception(f"Error posting visualization: {response.status_code} - {response.text}")
 
     return response.json()
     

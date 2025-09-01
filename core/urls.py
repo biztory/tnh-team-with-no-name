@@ -5,6 +5,7 @@ from . import views
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("test", views.test, name="test"),
 
     # Slack views
     path("slack/event", views_slack.event, name="slack_event"),
