@@ -1,5 +1,5 @@
 # imports - Python/general
-import json, markdown, base64, typing, io
+import json, markdown, base64, typing
 import traceback
 import openai as openai_client
 import pandas as pd
@@ -9,7 +9,7 @@ from openai.types.beta.assistant import Assistant
 # imports - Django
 from django.contrib.auth.base_user import AbstractBaseUser
 
-# imports - Orbit One
+# imports - our app
 # Models
 from core.models import OpenAISettings
 # Functions
@@ -270,98 +270,3 @@ def comment_on_dashboard_file(file_bytes:bytes, file_format:str, custom_prompt:s
         message = f"Something went wrong handling this request to the OpenAI API:\n\t{e}\n\t{traceback.format_exc()}"
         log_and_display_message(message=message, level="error")
         raise Exception(message)
-
-def data_to_chart_with_assistant(json_data:dict, user:AbstractBaseUser, system_prompt:str, user_prompt:str) -> typing.IO[bytes]:
-    """
-    Pass a dict/JSON data set to the OpenAI API, using the "Assistant" to create a chart.
-
-    json_data: The data to pass to the OpenAI API. This should be a JSON object.
-
-    system_prompt: The system prompt to use for the OpenAI API.
-    user_prompt: The user prompt to use for the OpenAI API.
-
-    Returns a BytesIO object representing the image.
-    """
-
-    openai_settings = get_openai_api_settings()
-
-    data_as_file = io.BytesIO()
-    data_as_file.name = "vizql_data_service_response.json"
-    # Write the data to the BytesIO object
-    data_as_file.write(json.dumps(json_data, indent=4).encode("utf-8"))
-    # Seek to the beginning of the BytesIO object
-    data_as_file.seek(0)
-
-
-    # Will need an Assistant with Code Interpreter enabled, so we can use it to create a chart. We'll for list and retrieve the Assistant if it already exists, or create it if it does not. It needs to match name, desired model, and tools.
-
-    assistant_name = "Orbit One Assistant - Data to Chart"
-    assistant_tool_types = ["code_interpreter"]
-    assistant_tools = [{"type": tool} for tool in assistant_tool_types]
-    assistant_model = openai_settings.preferred_model
-
-    openai_assistant = find_openai_assistant(
-        assistant_name=assistant_name,
-        assistant_tool_types=assistant_tool_types,
-        assistant_model=assistant_model,
-        user=user
-    )
-
-    if openai_assistant is not None:
-        log_and_display_message(f"Found existing OpenAI Assistant: {openai_assistant.name} with tools: {openai_assistant.tools} and model: {openai_assistant.model}", level="info")
-    else:
-        log_and_display_message(f"Creating new OpenAI Assistant: {assistant_name} with tools: {assistant_tools} and model: {assistant_model}", level="info")
-        # Create the assistant with the specified name, tools, and model
-        openai_assistant = openai_client.beta.assistants.create(
-            name=assistant_name,
-            description="An assistant that helps you with data questions and visualizing their answer.",
-            tools=assistant_tools,
-            model=assistant_model
-        )
-
-    # Create a file in OpenAI
-    file = openai_client.files.create(
-        file=data_as_file,
-        purpose="assistants"
-    )
-
-    # Use a thread to get the assistant to work
-    thread = openai_client.beta.threads.create(
-        messages=[
-            {"role": "assistant", "content": system_prompt},
-            {
-                "role": "user",
-                "content": user_prompt,
-                "attachments": [
-                    { "file_id": file.id, "tools": [{ "type": "file_search" }] }
-                ],
-            }
-        ]
-    )
-
-    # Now for real
-    run = openai_client.beta.threads.runs.create_and_poll(
-        thread_id=thread.id, assistant_id=openai_assistant.id
-    )
-
-    messages = list(openai_client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id))
-
-    try:
-        response_with_image = messages[0].content[0]
-        # Retrieve said image
-        image_data = openai_client.files.content(file_id=response_with_image.image_file.file_id)
-        image_data_bytes = image_data.read()
-        # Create a BytesIO object to store the image data
-        image_data_as_file = io.BytesIO(image_data_bytes)
-        image_data_as_file.name = "result.png"
-    except Exception as e:
-        # Raise through to views.py
-        message = f"Something went wrong handling this request to the OpenAI API:\n\t{e}\n\t{traceback.format_exc()}"
-        log_and_display_message(message=message, level="error")
-        extra_message = f"Provided we did get an answer, this was the response:\n\t{ messages[0].content }"
-        log_and_display_message(message=extra_message, level="error")
-        raise Exception(message)
-    
-    log_and_display_message(f"[data_to_chart_with_assistant] Tokens used with model { openai_settings.preferred_model }: { run.usage.prompt_tokens } for prompt, { run.usage.completion_tokens } for completion; { run.usage.total_tokens } total", level="info")
-
-    return image_data_as_file

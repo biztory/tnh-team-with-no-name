@@ -1,13 +1,10 @@
 # imports - Python/general
-from datetime import datetime, timezone
-import traceback
-import requests, os, copy
+import requests, copy
 
 # imports - Django
-from django.contrib.auth.base_user import AbstractBaseUser
 from django.conf import settings
 
-# imports - Orbit One
+# imports - our app
 # Models
 # N/A
 # Functions

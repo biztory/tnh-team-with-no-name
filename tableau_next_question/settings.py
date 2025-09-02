@@ -192,3 +192,7 @@ TABLEAU_API_VERSION = os.getenv("TABLEAU_API_VERSION", "")
 TABLEAU_SITE_CONTENT_URL = os.getenv("TABLEAU_SITE_CONTENT_URL", "")
 TABLEAU_PAT_NAME = os.getenv("TABLEAU_PAT_NAME", "")
 TABLEAU_PAT_SECRET = os.getenv("TABLEAU_PAT_SECRET", "")
+
+# App-specific
+TNQ_TEMP_WORKSPACE_NAME = os.getenv("TNQ_TEMP_WORKSPACE_NAME", "Timothy_s_Workspace")
+TNQ_TEMP_WORKSPACE_LABEL = os.getenv("TNQ_TEMP_WORKSPACE_LABEL", "(Tableau) Next Question! - Temporary Workspace")

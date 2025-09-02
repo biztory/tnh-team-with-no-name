@@ -1,10 +1,8 @@
 # imports - Python/general
 import traceback
-import re, json, random, io, copy
+import re, json, copy
 import xml.etree.ElementTree as ET
-import pandas
 from pydantic import BaseModel
-from typing import Optional
 
 # imports - Django
 from django.contrib.auth import get_user_model
@@ -13,10 +11,9 @@ User = get_user_model()
 
 # imports - TNQ
 # Models and Classes
-from core.models import SlackCredential, DataQuestion, DataQuestionAnswer
+from core.models import SlackCredential
 # Functions
 from tableau_next_question.functions import log_and_display_message
-# import core.functions.helpers_orbit_one as helpers_orbit_one
 import core.functions.openai as openai
 import core.functions.slack as slack
 # import core.functions.entity_search as entity_search
@@ -34,13 +31,12 @@ import core.functions.tableau.documents as tableau_documents
 def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
 
     """
-    Respond to a data question from a user in "Slack", "Teams", or "Google Chat" (those are also the respective values allowed for `source`). Note that currently only Slack is supported.
+    Respond to a data question from a user in Slack. Note that currently only Slack is supported, other IM tools may be added in the future.
     
     `question` is to contain the question written by the user, which can be further narrowed down by our function here.
 
     `kwargs` is a dictionary containing additional information that may vary depending on the source. For example, in Slack, it may contain the user ID. It will help us respond in the right manner.
     """
-
     
     if source == "slack":
         slack_credential = SlackCredential.objects.first()
@@ -52,7 +48,7 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
         if slack_user_id is None or slack_channel is None or thread_ts is None:
             raise Exception("Slack user ID, channel, and thread timestamp are required to respond to a data question in Slack.")
 
-        # Get the user's email address from their Slack profile, so we can find their Orbit One ID.
+        # Get the user's email address from their Slack profile, so we can find their account.
         slack_user_info = slack.get_user_info(slack_user_id=slack_user_id, slack_credential=slack_credential)
         if slack_user_info is None:
             raise Exception(f"Could not find Slack user profile for user ID { slack_user_id }.")
@@ -77,8 +73,8 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
         use_tableau_core = True
         use_tableau_next = True
 
-        keywords_no_tableau_core = ["no tableau cloud", "only tableau next", "only on tableau next", "only with tableau next", "not on tableau cloud", "not with tableau cloud"]
-        keywords_no_tableau_next = ["no tableau next", "only tableau cloud", "only on tableau cloud", "only with tableau cloud", "not on tableau next", "not with tableau next"]
+        keywords_no_tableau_core = ["no tableau cloud", "only tableau next", "only on tableau next", "only with tableau next", "not on tableau cloud", "not with tableau cloud", "tableau next only"]
+        keywords_no_tableau_next = ["no tableau next", "only tableau cloud", "only on tableau cloud", "only with tableau cloud", "not on tableau next", "not with tableau next", "tableau cloud only"]
         for keyword in keywords_no_tableau_core:
             if keyword in question.lower():
                 use_tableau_core = False
@@ -211,8 +207,8 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
         target_platform = selected_viz.get("source", "unknown platform") if selected_viz is not None else "unknown platform"
         log_and_display_message(f"OpenAI selected visualization ID { openai_response.id } on { target_platform }.")
 
-        # FLOW: GET VIZ IMAGE FROM TABLEAU NEXT/CORE #
-        # ------------------------------------------ #
+        # FLOW: GET VIZ IMAGE FROM TABLEAU NEXT or CORE #
+        # --------------------------------------------- #
 
         if target_platform == "tableau_next":
             # Re-get the viz (dashboard) on Next
@@ -285,44 +281,6 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
             message_for_response = FormattedMessage("Would you like to rebuild this viz on Tableau Next?").for_slack()
 
             slack.post_message(slack_channel=slack_channel, slack_credential=slack_credential, blocks=message_blocks_for_rebuild, text=message_for_response, thread_ts=thread_ts)
-
-        return
-
-        # Below are a few... experiments.
-
-        workspaces = tableau_next_api.list_workspaces(connection_dict)
-        log_and_display_message(f"Found { len(workspaces) } workspaces on Tableau Next.")
-
-        workspace_name_for_demo = "Timothy_s_Workspace"
-
-        workspace_for_demo = next((ws for ws in workspaces if ws.get("name", "").lower() == workspace_name_for_demo.lower()), None)
-
-        assets_for_workspace = tableau_next_api.get_workspace_asset_collection(connection_dict, workspace_for_demo.get("id", None))
-
-    
-        semantic_models_for_workspace = [asset for asset in assets_for_workspace if asset.get("assetType", "") == "SemanticModel"]
-
-
-        asset_id = next((asset.get("assetId", None) for asset in semantic_models_for_workspace), None)
-
-        all_semantic_models = tableau_next_api.get_all_semantic_models(connection_dict).get("items", [])
-
-
-        selected_semantic_model = all_semantic_models[0]
-        selected_semantic_model_id = selected_semantic_model.get("id", None)
-
-
-        # As a test, let's get a specific visualization, update an attribute, and create a copy.
-        source_viz_name = "Recreate_Me_From_Cloud"
-        source_viz = tableau_next_api.get_visualization(connection_dict, asset_id_or_name=source_viz_name)
-        target_viz = tableau_next_functions.copy_viz_with_changes(source_viz=source_viz, new_name="OG_Viz_Recreated", new_label="Copied Viz That Is Now Per Category")
-        target_viz_on_next = tableau_next_api.post_visualization(connection_dict, target_viz)
-        target_viz_on_next_url = f"{ settings.SF_ORG_DOMAIN }tableau/visualization/{ target_viz_on_next.get('name') }/edit"
-
-        formatted_message_for_response = FormattedMessage(f"Here is a new viz on Tableau Next, it's now per category instead of sub-category!\n\n{ target_viz_on_next_url }").for_slack()
-
-        status_message = slack.post_status_message(slack_channel=slack_channel, slack_credential=slack_credential, previous_status_message_ts=status_message.get("ts", None)) # Delete status message
-        slack.post_message(slack_channel=slack_channel, slack_credential=slack_credential, text=formatted_message_for_response, thread_ts=thread_ts)
 
         return
 
@@ -491,7 +449,7 @@ def rebuild_core_viz_in_next(core_viz_luid:str, kwargs:dict) -> None:
         workspaces = tableau_next_api.list_workspaces(connection_dict)
         log_and_display_message(f"Found { len(workspaces) } workspaces on Tableau Next.")
 
-        workspace_name_for_demo = "Timothy_s_Workspace"
+        workspace_name_for_demo = settings.TNQ_TEMP_WORKSPACE_NAME
         workspace_for_demo = next((ws for ws in workspaces if ws.get("name", "").lower() == workspace_name_for_demo.lower()), None)
 
         sheet_definition["workspace"] = {

@@ -1,13 +1,12 @@
 # App-wide helper functions
 
 # imports - Python/general
-import logging, inspect, os, traceback
+import logging, inspect, os
 
 # imports - Django
 from django.contrib import messages
-from django.http import HttpRequest
 
-# imports - Orbit One
+# imports - our app
 # N/A
 
 # For reporting messages, and errors.

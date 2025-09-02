@@ -13,17 +13,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='SlackChannelMapping',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('slack_workspace_id', models.TextField()),
-                ('slack_channel_id', models.TextField(max_length=64)),
-                ('slack_channel_name', models.TextField()),
-                ('slack_channel_email', models.TextField(blank=True, null=True)),
-                ('slack_channel_type', models.TextField(choices=[('public_channel', 'Public Channel'), ('private_channel', 'Private Channel'), ('im', 'Direct Message'), ('mpim', 'Group DM')], default='public_channel', max_length=128)),
-            ],
-        ),
-        migrations.CreateModel(
             name='SlackCredential',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),

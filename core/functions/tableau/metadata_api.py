@@ -1,11 +1,10 @@
 # imports - Python/general
-import traceback
-import requests, re, json
+import requests, re
 
 # imports - Django
 # N/A
 
-# imports - Orbit One
+# imports - our app
 # Models
 # N/A
 

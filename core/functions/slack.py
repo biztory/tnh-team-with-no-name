@@ -9,25 +9,17 @@ import slack_sdk.errors
 from django.conf import settings
 from django.db.models import Q
 
-# imports - Orbit One
+# imports - our app
 # Models
-from core.models import SlackCredential, SlackChannelMapping
+from core.models import SlackCredential
 # Functions
 from tableau_next_question.functions import log_and_display_message
 import core.functions.helpers_other as helpers_other
 
-# Orbit One to Slack #
+# Our app to Slack #
 # ################## #
 
 # Functions for interacting with Slack
-
-
-def get_slack_redirect_uri(url_encoded:bool=True) -> str:
-    redirect_uri = f"https://{ settings.ORBIT_ONE_APP_DOMAIN }/organization/slack_authorization_response"
-    if url_encoded:
-        return urllib.parse.quote_plus(redirect_uri)
-    else:
-        return redirect_uri
 
 def check_slack_credentials(slack_credentials:SlackCredential) -> SlackCredential | str | None:
     """
@@ -205,246 +197,15 @@ def respond_to_response_url(response_url:str, text:str) -> dict:
 # Functions related to Slack channel mappings
 
 
-def determine_channel_type(slack_channel:dict) -> SlackChannelMapping.SlackChannelType:
+def determine_channel_type(slack_channel:dict) -> str:
     """
-    Takes a Slack channel object (from the API) and returns the corresponding SlackChannelMapping.SlackChannelType.
+    Takes a Slack channel object (from the API) and returns the corresponding channel type. (The intention was to extend this to a full mapping, but this may be applicable later only.)
     """
     if slack_channel.get("is_private", False):
-        return SlackChannelMapping.SlackChannelType.private_channel
+        return "private_channel"
     elif slack_channel.get("is_im", False):
-        return SlackChannelMapping.SlackChannelType.im
+        return "im"
     elif slack_channel.get("is_mpim", False):
-        return SlackChannelMapping.SlackChannelType.mpim
+        return "mpim"
     else:
-        return SlackChannelMapping.SlackChannelType.public_channel
-
-def update_slack_channel_mappings() -> None:
-    """
-    Called by a scheduled task, updates the Slack channel mappings for all channels in the organization.
-    """
-    log_and_display_message("Updating Slack channel mappings for all organizations.")
-    slack_credential = SlackCredential.objects.first()
-    if slack_credential is None:
-        raise Exception("No credentials found for Slack (any app). Has it been installed and configured in Orbit One?")
-    
-    slack_webclient = slack_sdk.WebClient(token=slack_credential.slack_workspace_bot_user_access_token)
-    
-    mappings_new = []
-    mappings_existing = SlackChannelMapping.objects.filter(slack_workspace_id=slack_credential.slack_workspace_id)
-    
-    # We will be bulk creating and bulk updating the mappings
-
-    try:
-        cursor = None
-        
-        while True:
-            response = slack_webclient.conversations_list(cursor=cursor, exclude_archived=True, limit=1000)
-
-            for channel in response.get("channels", []):
-
-                try:
-
-                    # Get properties
-                    slack_channel_id = channel.get("id")
-                    slack_channel_name = channel.get("name")
-                    slack_channel_type = determine_channel_type(channel)
-
-                    # Update if it exists, or create if it doesn't.
-                    if slack_channel_id and slack_channel_name:
-                        # Check if the mapping already exists
-                        slack_channel_mapping = mappings_existing.filter(slack_channel_name=slack_channel_name).first()
-                        if slack_channel_mapping is None:
-                            # Create a new mapping
-                            slack_channel_mapping = SlackChannelMapping(
-                                slack_channel_id=slack_channel_id,
-                                slack_workspace_id=slack_credential.slack_workspace_id,
-                                slack_channel_name=slack_channel_name,
-                                slack_channel_type=slack_channel_type
-                            )
-                            mappings_new.append(slack_channel_mapping)
-                        else:
-                            # Update the existing mapping, but only if the ID or type has changed
-                            if slack_channel_mapping.slack_channel_id != slack_channel_id or slack_channel_mapping.slack_channel_type != slack_channel_type:
-                                slack_channel_mapping.slack_channel_id = slack_channel_id
-                                slack_channel_type = slack_channel_mapping.slack_channel_type
-                            else:
-                                # Drop it so we don't re-update it for nothing
-                                mappings_existing = mappings_existing.exclude(id=slack_channel_mapping.id)
-
-                except Exception as e:
-                    log_and_display_message(f"There was an error processing the Slack channel { slack_channel_id }.\n\t{e}\n\t{traceback.format_exc()}")
-
-            cursor = response.get("response_metadata", {}).get("next_cursor")
-            
-            if not cursor:
-                break
-        
-        # Bulk create new mappings
-        if mappings_new:
-            SlackChannelMapping.objects.bulk_create(mappings_new)
-            log_and_display_message(f"Created { len(mappings_new) } new Slack channel mappings.")
-        else:
-            log_and_display_message("No new Slack channel mappings to create.")
-        # Bulk update existing mappings
-        if mappings_existing:
-            SlackChannelMapping.objects.bulk_update(mappings_existing, ["slack_channel_name"])
-            log_and_display_message(f"Updated { len(mappings_existing) } existing Slack channel mappings.")
-        else:
-            log_and_display_message("No existing Slack channel mappings to update.")
-        
-        log_and_display_message("Finished updating Slack channel mappings.")
-        return None
-    
-    except slack_sdk.errors.SlackApiError as e:
-        log_and_display_message(f"Slack API error: {e}", level="error")
-        return None
-        
-
-def find_slack_channel_mapping(slack_channel_identifier:str, slack_channel_type:SlackChannelMapping.SlackChannelType=None) -> SlackChannelMapping | None:
-    """
-    Takes either a Slack channel ID or a Slack channel as the slack_channel_identifier, and returns the corresponding SlackChannelMapping object.
-
-    slack_channel_identifier: The ID of the Slack channel (e.g. "C1234567890" or "U12312312") or the name of the Slack channel (e.g. "general" or "#general"). Also allows for an email address (e.g. "timothy.vermeiren@biztory.be") to be passed in, which will attempt to find the user's DM/ID in the mappings.
-     
-    If the prefix (#) is provided, it will be used to determine the type of channel.
-    
-    slack_channel_type: The type of channel (e.g. public_channel, private_channel, im, mpim), if known.
-
-    If the SlackChannelMapping object is not found, we'll use the Slack API to try to resolve the name from the ID, or the ID from the name. This means iterating until we find the mapping, or until we run out of channels to check. If a result is found with the API, it is stored in the database.
-    """
-
-    # Determine the type of channel based on the name or ID, if we can
-    if slack_channel_type is None:
-        if slack_channel_identifier.startswith("#") or slack_channel_identifier.startswith("C") or slack_channel_identifier.startswith("Z"):
-            # Not 1000% correct, # could be a private channel, but we don't fully support that yet. Z is Slack Connect.
-            slack_channel_type = SlackChannelMapping.SlackChannelType.public_channel
-        elif "@" in slack_channel_identifier or slack_channel_identifier.startswith("D") or slack_channel_identifier.startswith("U"):
-            # "@" in the identifier means it's an email address, and thus a user and thus an IM/DM.
-            slack_channel_type = SlackChannelMapping.SlackChannelType.im
-        elif slack_channel_identifier.startswith("G"):
-            slack_channel_type = SlackChannelMapping.SlackChannelType.private_channel
-        # There is no else; the type will remain None or whatever it was set to.
-
-    # Remove the name prefixes from the identifier if it exists; we don't store it or use it in lookups.
-    if slack_channel_identifier.startswith("#"):
-        slack_channel_identifier = slack_channel_identifier[1:]
-
-    # Try known mappings by name first.
-    if slack_channel_type:
-        slack_channel_mapping = SlackChannelMapping.objects.filter(slack_channel_name=slack_channel_identifier, slack_channel_type=slack_channel_type).first()
-    else:
-        slack_channel_mapping = SlackChannelMapping.objects.filter(slack_channel_name=slack_channel_identifier).first()
-
-    if slack_channel_mapping is not None:
-        return slack_channel_mapping
-    
-    # Try known mappings by ID second.
-    if slack_channel_type:
-        slack_channel_mapping = SlackChannelMapping.objects.filter(slack_channel_id=slack_channel_identifier, slack_channel_type=slack_channel_type).first()
-    else:
-        slack_channel_mapping = SlackChannelMapping.objects.filter(slack_channel_id=slack_channel_identifier).first()
-    if slack_channel_mapping is not None:
-        return slack_channel_mapping
-    
-    # Or try by email third, if the identifier is an email address.
-    if "@" in slack_channel_identifier:
-        if slack_channel_type:
-            slack_channel_mapping = SlackChannelMapping.objects.filter(slack_channel_email=slack_channel_identifier, slack_channel_type=slack_channel_type).first()
-        else:
-            slack_channel_mapping = SlackChannelMapping.objects.filter(slack_channel_email=slack_channel_identifier).first()
-        if slack_channel_mapping is not None:
-            return slack_channel_mapping
-    
-    
-    # If we didn't have the mapping already, let's use the Slack API to try and find it.
-    slack_credential = SlackCredential.objects.first()
-    if slack_credential is None:
-        raise Exception("No credentials found for Slack (any app). Has it been installed and configured in Orbit One?")
-    slack_webclient = slack_sdk.WebClient(token=slack_credential.slack_workspace_bot_user_access_token)
-
-    found_slack_channel = None
-
-    # If we know the type, we can use it to filter the channels we'll be requesting from the Slack API. The SlackChannelType should coincide with the value(s) the API is expecting.
-    slack_channel_type_for_api = None
-    if slack_channel_type:
-        slack_channel_type_for_api = [slack_channel_type.value]
-
-    # Different approach for channels, as for DMs. DMs, we can just initiate through the user ID and get a conversation ID. Channels, we look up.
-    try:
-
-        if slack_channel_type in [SlackChannelMapping.SlackChannelType.public_channel, SlackChannelMapping.SlackChannelType.private_channel]:
-
-            cursor = None
-            
-            while not found_slack_channel:
-                if slack_channel_type_for_api:
-                    response = slack_webclient.conversations_list(cursor=cursor, exclude_archived=True, limit=1000, types=slack_channel_type_for_api)
-                else:
-                    response = slack_webclient.conversations_list(cursor=cursor, exclude_archived=True, limit=1000)
-
-                found_slack_channel = next((channel for channel in response.get("channels", []) if channel.get("id") == slack_channel_identifier or channel.get("name") == slack_channel_identifier), None)
-
-                if found_slack_channel is not None:
-                    # We found the name, let's create a new mapping
-                    slack_channel_mapping = SlackChannelMapping.objects.create(
-                        slack_channel_id=found_slack_channel.get("id"),
-                        slack_workspace_id=slack_credential.slack_workspace_id,
-                        slack_channel_name=found_slack_channel.get("name"),
-                        slack_channel_type=determine_channel_type(found_slack_channel)
-                    )
-                    return slack_channel_mapping
-                
-                else:
-                    cursor = response.get("response_metadata", {}).get("next_cursor")
-                
-                if not cursor:
-                    break
-
-            # If we get here, we didn't find the channel name
-            log_and_display_message(f"Slack channel identifier \"{ slack_channel_identifier }\" could not be resolved to a name or ID.")
-            return None
-    
-        else:
-            # DMs, either by:
-            # - email, which we need to look up and store
-            # - or ID, where we can just initiate the conversation with the user ID and get a conversation ID.
-            if "@" in slack_channel_identifier:
-                # We have an email address, so we need to look it up first.
-                user = slack_webclient.users_lookupByEmail(email=slack_channel_identifier)
-                if user is not None:
-                    # We will also initiate a conversation with the user, so we can get the ID for the DM (and not just the user).
-                    conversation = slack_webclient.conversations_open(users=user.get("user", {}).get("id"))
-                    if conversation is not None:
-                        slack_dm_channel_id = conversation.get("channel", {}).get("id")
-                    else:
-                        slack_dm_channel_id = None
-                    slack_channel_mapping = SlackChannelMapping.objects.create(
-                        slack_workspace_id=slack_credential.slack_workspace_id,
-                        slack_channel_id=slack_dm_channel_id,
-                        slack_channel_name=user.get("user", {}).get("id"),
-                        slack_channel_email=slack_channel_identifier,
-                        slack_channel_type=SlackChannelMapping.SlackChannelType.im
-                    )
-                    return slack_channel_mapping
-                else:
-                    log_and_display_message(f"Slack channel identifier \"{ slack_channel_identifier }\" could not be resolved to a name or ID.")
-                    return None
-            else:
-                log_and_display_message(f"Opening Bot DM with { slack_channel_identifier }")
-                conversation = slack_webclient.conversations_open(users=slack_channel_identifier)
-                if conversation is not None:
-                    # We found the name, let's create a new mapping
-                    slack_channel_mapping = SlackChannelMapping.objects.create(
-                        slack_channel_id=conversation.get("channel", {}).get("id"),
-                        slack_workspace_id=slack_credential.slack_workspace_id,
-                        slack_channel_name=slack_channel_identifier,
-                        slack_channel_type=SlackChannelMapping.SlackChannelType.im
-                    )
-                    return slack_channel_mapping
-                else:
-                    log_and_display_message(f"Slack channel identifier \"{ slack_channel_identifier }\" could not be resolved to a name or ID.")
-                    return None
-
-    except Exception as e:
-        log_and_display_message(f"There was an error processing the Slack channel { slack_channel_identifier }.\n\t{e}\n\t{traceback.format_exc()}")
-        return None
+        return "public_channel"

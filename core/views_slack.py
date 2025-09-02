@@ -7,7 +7,7 @@ from django.http import JsonResponse, HttpRequest, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
-# imports - Orbit One
+# imports - our app
 # Models
 from core.models import SlackCredential
 # Functions
@@ -17,10 +17,10 @@ import core.functions.slack as slack
 import core.tasks as tasks
 
 
-# Slack to Orbit One #
+# Slack to our app #
 # ################## #
 
-# Endpoints Slack (users) can post to to interact with Orbit One.
+# Endpoints Slack (users) can post to to interact with our app.
 
 # Event subscriptions: https://api.slack.com/events-api#event_subscriptions
 # Interactive components: https://api.slack.com/interactivity
@@ -56,7 +56,7 @@ def event(request:HttpRequest):
             log_and_display_message(f"Invalid token in request: { request_json.get('token', 'no token at all!') }.")
             return JsonResponse({ "error": "Invalid token" }, status=403)
 
-        # Start task and respond to the user if it's a direct message, not sent by a bot/Orbit One itself.
+        # Start task and respond to the user if it's a direct message, not sent by a bot/ourapp itself.
         if request_json["event"].get("type") == "message" and request_json["event"].get("subtype") not in ["message_changed", "message_deleted"] and request_json["event"].get("channel_type") == "im" and "bot_id" not in request_json["event"]:
 
             slack_credential, slack_credential_created = SlackCredential.objects.get_or_create()
