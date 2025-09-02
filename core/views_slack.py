@@ -61,7 +61,7 @@ def event(request:HttpRequest):
 
             slack_credential, slack_credential_created = SlackCredential.objects.get_or_create()
 
-            thread_ts = request_json["event"].get("thread_ts", request_json["event"].get("message", {}).get("ts"))
+            thread_ts = request_json["event"].get("thread_ts", request_json["event"].get("ts", request_json["event"].get("message", {}).get("ts")))
             first_name = request_json["event"].get("user_profile", {}).get("first_name")
 
             # Start an async task to respond to the user with the actual answer.
@@ -85,6 +85,40 @@ def event(request:HttpRequest):
                 else:
                     message = f"Thanks, got your question! I'll start thinking about it and get back to you in a moment."
                 slack.post_message(slack_channel=request_json["event"]["channel"], slack_credential=slack_credential, text=message, thread_ts=thread_ts)
+
+        # Possibilities other than IM
+        if request_json["event"].get("type") == "message" and request_json["event"].get("subtype") not in ["message_changed", "message_deleted"] and request_json["event"].get("channel_type") != "im" and "bot_id" not in request_json["event"]:
+            log_and_display_message(f"Received event in channel { request_json['event'].get('channel') } which is not an IM.")
+            supported_channels = ["C09D26BK0SY"]
+            if request_json["event"].get("channel") not in supported_channels:
+                log_and_display_message(f"Channel { request_json['event'].get('channel') } is not supported. Sending generic response, but not processing further.")
+                response = JsonResponse({ "message": "Event received" })
+                return response
+            else:
+                log_and_display_message(f"Channel { request_json['event'].get('channel') } is supported.")
+
+                # For now, assume this is a data question and answer it like any other.
+                slack_credential, slack_credential_created = SlackCredential.objects.get_or_create()
+
+                thread_ts = request_json["event"].get("thread_ts", request_json["event"].get("ts", request_json["event"].get("message", {}).get("ts")))
+                first_name = request_json["event"].get("user_profile", {}).get("first_name")
+                try:
+                    kwargs_for_task = {
+                        "slack_channel": request_json["event"]["channel"],
+                        "thread_ts": thread_ts,
+                        "slack_user_id": request_json["event"]["user"],
+                        "first_name": first_name,
+                    }
+                    task_result = tasks.respond_to_data_question_task(source="slack", question=request_json["event"]["text"], kwargs=kwargs_for_task)
+                except Exception as e:
+                    error_message = f"Failed to start async task:\n\t{e}\n\t{traceback.format_exc()}"
+                    log_and_display_message(error_message, level="error")
+                    return JsonResponse({ "error": error_message }, status=500)
+                else:
+                    log_and_display_message(f"Started async task { task_result } to respond to user.")
+                    # Respond with a preliminary message
+                    message = f"That sounds like a data question! I'll start thinking about it, try and find an answer on Tableau. I'll get back to you in a moment."
+                    slack.post_message(slack_channel=request_json["event"]["channel"], slack_credential=slack_credential, text=message, thread_ts=thread_ts)
 
         response = JsonResponse({ "message": "Event received" })
         return response

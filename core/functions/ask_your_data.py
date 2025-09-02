@@ -77,8 +77,8 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
         use_tableau_core = True
         use_tableau_next = True
 
-        keywords_no_tableau_core = ["no tableau cloud", "only tableau next", "only on tableau next", "not on tableau cloud"]
-        keywords_no_tableau_next = ["no tableau next", "only tableau cloud", "only on tableau cloud", "not on tableau next"]
+        keywords_no_tableau_core = ["no tableau cloud", "only tableau next", "only on tableau next", "only with tableau next", "not on tableau cloud", "not with tableau cloud"]
+        keywords_no_tableau_next = ["no tableau next", "only tableau cloud", "only on tableau cloud", "only with tableau cloud", "not on tableau next", "not with tableau next"]
         for keyword in keywords_no_tableau_core:
             if keyword in question.lower():
                 use_tableau_core = False
@@ -222,16 +222,19 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
 
             status_message = slack.post_status_message(slack_channel=slack_channel, slack_credential=slack_credential, previous_status_message_ts=status_message.get("ts", None), text=f"Found the one we need! Getting details for \"{ selected_viz_tableau_next.get('MasterLabel', '?') }\" on Tableau Next\"...")
 
-            viz_image_download = tableau_next_api.post_image_download(connection_dict, asset=selected_viz_tableau_next, metadata_only=False)
+            viz_image_download_response = tableau_next_api.post_image_download(connection_dict, asset=selected_viz_tableau_next, metadata_only=False)
+            viz_image_bytes = viz_image_download_response.content
 
         elif target_platform == "tableau_core":
             selected_viz_tableau_core = next((viz for viz in dashboards_sheets_and_fields if viz.get("luid") == selected_viz.get("id")), {})
-            viz_image_download = tableau_rest_api.download_view_image(rest_api_connection=tableau_core_connection_dict, view_luid=selected_viz_tableau_core.get("luid"))
+            viz_image_download_response = tableau_rest_api.download_view_image(rest_api_connection=tableau_core_connection_dict, view_luid=selected_viz_tableau_core.get("luid"))
+            viz_image_bytes = viz_image_download_response.content
+        
+        status_message = slack.post_status_message(slack_channel=slack_channel, 
+        slack_credential=slack_credential, previous_status_message_ts=status_message.get("ts", None)) # Delete status message
 
-            viz_image_bytes = viz_image_download.content
-            message = f":chart_with_upwards_trend: This chart should help us answer the question!"
-            slack.upload_file(slack_channel=slack_channel, slack_credential=slack_credential, file=viz_image_bytes, file_format="png", file_title="viz_image", initial_comment=message, thread_ts=thread_ts)
-            status_message = slack.post_status_message(slack_channel=slack_channel, slack_credential=slack_credential, previous_status_message_ts=status_message.get("ts", None)) # Delete status message
+        message = f":chart_with_upwards_trend: This chart should help us answer the question!"
+        slack.upload_file(slack_channel=slack_channel, slack_credential=slack_credential, file=viz_image_bytes, file_format="png", file_title="viz_image", initial_comment=message, thread_ts=thread_ts)
 
         status_message = slack.post_status_message(slack_channel=slack_channel, slack_credential=slack_credential, text="Formulating an answer to the question...", thread_ts=thread_ts)
 
@@ -279,9 +282,9 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
                 }
             ]
 
-        message_for_response = FormattedMessage("Would you like to rebuild this viz on Tableau Next?").for_slack()
+            message_for_response = FormattedMessage("Would you like to rebuild this viz on Tableau Next?").for_slack()
 
-        slack.post_message(slack_channel=slack_channel, slack_credential=slack_credential, blocks=message_blocks_for_rebuild, text=message_for_response, thread_ts=thread_ts)
+            slack.post_message(slack_channel=slack_channel, slack_credential=slack_credential, blocks=message_blocks_for_rebuild, text=message_for_response, thread_ts=thread_ts)
 
         return
 
