@@ -1,8 +1,20 @@
-# Tableau Next API Lab
+# (Tableau) Next Question
 
-## Notes on usage
+This repository contains the code for **(Tableau) Next Question**, a Tableau Next Hackathon entry by Biztory's Team With No Name.
 
-We'll write this later.
+This repository is intended to serve as a reference to some of the code used, and as an example for others trying to achieve similar goals.
+
+### Intention
+
+Focusing on the concept of interoperability, our intention is to showcase how Tableau Next and other Salesforce platforms can be connected, and how they can work together to provide people with a seamless experience across products.
+
+We’re mainly looking to combine Tableau Next with Tableau Cloud/Server/Core, as well as Slack. Use of other Salesforce products, features and components (e.g. agentic features) could be considered as well (but is not part of the original project).
+
+### Use Case
+
+More specifically, our use case will be that of a Slack app titled (Tableau) Next Question, which will be the central component that connects Tableau Next and Tableau Core to answer data questions more dynamically and effectively than ever.
+
+The idea is that users can formulate questions in Slack, directed to the app specifically or in any channel, and that we use assets on either Tableau platform to provide an answer. The two demo scenarios described below should illustrate the app’s capabilities.
 
 ## Notes on setup
 

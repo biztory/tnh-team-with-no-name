@@ -19,7 +19,7 @@ import core.functions.slack as slack
 # import core.functions.entity_search as entity_search
 # import core.functions.tableau.vizql_data_service as vizql_data_service
 from core.functions.helpers import FormattedMessage
-from core.functions.helpers_other import remove_fields_from_dictionary
+from core.functions.helpers_other import remove_fields_from_dictionary, to_bool
 import core.functions.prompts as ai_prompts
 import core.functions.tableau.next_api as tableau_next_api
 import core.functions.tableau.next_functions as tableau_next_functions
@@ -55,8 +55,8 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
         slack_user_email = slack_user_info.get("profile", {}).get("email", None)
 
         user = User.objects.filter(email=slack_user_email).first()
-        if user is None:
-            raise Exception(f"Could not find user with email address { slack_user_email }.")
+        # if user is None:
+        #     raise Exception(f"Could not find user with email address { slack_user_email }.")
         
         status_message = slack.post_status_message(slack_channel=slack_channel, slack_credential=slack_credential, text="Interpreting question...", thread_ts=thread_ts)
 
@@ -73,18 +73,27 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
         use_tableau_core = True
         use_tableau_next = True
 
-        keywords_no_tableau_core = ["no tableau cloud", "only tableau next", "only on tableau next", "only with tableau next", "not on tableau cloud", "not with tableau cloud", "tableau next only"]
-        keywords_no_tableau_next = ["no tableau next", "only tableau cloud", "only on tableau cloud", "only with tableau cloud", "not on tableau next", "not with tableau next", "tableau cloud only"]
-        for keyword in keywords_no_tableau_core:
-            if keyword in question.lower():
-                use_tableau_core = False
-                log_and_display_message(f"Tableau Core is not applicable: \"{keyword}\" was specified.")
-                break
-        for keyword in keywords_no_tableau_next:
-            if keyword in question.lower():
-                use_tableau_next = False
-                log_and_display_message(f"Tableau Next is not applicable: \"{keyword}\" was specified.")
-                break
+        if not to_bool(settings.TNQ_DISABLE_TABLEAU_CORE):
+            keywords_no_tableau_core = ["no tableau cloud", "only tableau next", "only on tableau next", "only with tableau next", "not on tableau cloud", "not with tableau cloud", "tableau next only"]
+            for keyword in keywords_no_tableau_core:
+                if keyword in question.lower():
+                    use_tableau_core = False
+                    log_and_display_message(f"Tableau Core is not applicable: \"{keyword}\" was specified.")
+                    break
+        else:
+            log_and_display_message(f"Tableau Core is disabled at the application level with TNQ_DISABLE_TABLEAU_CORE.")
+            use_tableau_core = False
+
+        if not to_bool(settings.TNQ_DISABLE_TABLEAU_NEXT):
+            keywords_no_tableau_next = ["no tableau next", "only tableau cloud", "only on tableau cloud", "only with tableau cloud", "not on tableau next", "not with tableau next", "tableau cloud only"]
+            for keyword in keywords_no_tableau_next:
+                if keyword in question.lower():
+                    use_tableau_next = False
+                    log_and_display_message(f"Tableau Next is not applicable: \"{keyword}\" was specified.")
+                    break
+        else:
+            log_and_display_message(f"Tableau Next is disabled at the application level with TNQ_DISABLE_TABLEAU_NEXT.")
+            use_tableau_next = False
 
         # We will collect stuff in this list
         visualizations_for_review = []
@@ -219,7 +228,7 @@ def respond_to_data_question(source:str, question:str, kwargs:dict) -> None:
             status_message = slack.post_status_message(slack_channel=slack_channel, slack_credential=slack_credential, previous_status_message_ts=status_message.get("ts", None), text=f"Found the one we need! Getting details for \"{ selected_viz_tableau_next.get('MasterLabel', '?') }\" on Tableau Next\"...")
 
             viz_image_download_response = tableau_next_api.post_image_download(connection_dict, asset=selected_viz_tableau_next, metadata_only=False)
-            viz_image_bytes = viz_image_download_response.content
+            viz_image_bytes = viz_image_download_response.get("image_bytes")
 
         elif target_platform == "tableau_core":
             selected_viz_tableau_core = next((viz for viz in dashboards_sheets_and_fields if viz.get("luid") == selected_viz.get("id")), {})

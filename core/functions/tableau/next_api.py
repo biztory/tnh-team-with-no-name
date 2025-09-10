@@ -1,5 +1,5 @@
 # imports - Python/general
-import requests, copy
+import requests, copy, base64
 
 # imports - Django
 from django.conf import settings
@@ -89,6 +89,15 @@ def post_image_download(connection_dict: dict, asset: dict, metadata_only:bool=F
     Post a request to download an image or metadata of a specific asset.
 
     Note the discrepancies between Dashboard and Submetric. This is probably because currently Dashboard comes from the "new" Tableau Next REST API, but Submetric comes from the "old" Salesforce SSOT data we're accessing.
+
+    When using metadata_only, this will return the JSON response. When getting the image for an asset (i.e. metadata_only=False), this will return a dict with the original JSON response _and_ the image bytes, in this format:
+
+    ```
+    {
+        "original_response": { ... }, 
+        "image_bytes": b"..."
+    }
+    ```
     """
 
     connect_api_post_image_download_url = f"{ connection_dict['connect_api_base_url'] }/tableau/download"
@@ -97,6 +106,7 @@ def post_image_download(connection_dict: dict, asset: dict, metadata_only:bool=F
     connect_api_post_image_download_url += metadata_only_query_param
 
     # Determine asset_type
+    asset_type = "AnalyticsDashboard" # Default
     # For dashboard, this will be in attributes -> type. 
     asset_type_from_attributes = asset.get("attributes", {}).get("type")
     if asset_type_from_attributes is not None:
@@ -135,7 +145,7 @@ def post_image_download(connection_dict: dict, asset: dict, metadata_only:bool=F
         
     response = connection_dict["session"].post(connect_api_post_image_download_url, json=connect_api_post_image_body)
     
-    if response.status_code != 200:
+    if not response.ok:
         log_and_display_message(f"Error downloading data: {response.status_code} - {response.text}")
         # Yes, but we know this happens, because the Tableau Next API is not working yet. So we'll cheat and return an image we already have.
         new_response = copy.deepcopy(response)
@@ -143,12 +153,18 @@ def post_image_download(connection_dict: dict, asset: dict, metadata_only:bool=F
         sample_image_location = "resources/biztory_team_members_strava_data.png"
         sample_image_content = open(sample_image_location, "rb").read()
         new_response._content = sample_image_content
-        return new_response
+        return {
+            "original_response": response.json(),
+            "image_bytes": new_response.content
+        }
     
     if metadata_only:
         return response.json()
     else:
-        return response
+        return {
+            "original_response": response.json(),
+            "image_bytes": base64.b64decode(response.json().get("downloadFile", {}).get("base64EncodedData", ""))
+        }
 
 def get_all_semantic_models(connection_dict: dict) -> dict:
     """

@@ -196,3 +196,5 @@ TABLEAU_PAT_SECRET = os.getenv("TABLEAU_PAT_SECRET", "")
 # App-specific
 TNQ_TEMP_WORKSPACE_NAME = os.getenv("TNQ_TEMP_WORKSPACE_NAME", "Timothy_s_Workspace")
 TNQ_TEMP_WORKSPACE_LABEL = os.getenv("TNQ_TEMP_WORKSPACE_LABEL", "(Tableau) Next Question! - Temporary Workspace")
+TNQ_DISABLE_TABLEAU_CORE = os.getenv("TNQ_DISABLE_TABLEAU_CORE", False)
+TNQ_DISABLE_TABLEAU_NEXT = os.getenv("TNQ_DISABLE_TABLEAU_NEXT", False)

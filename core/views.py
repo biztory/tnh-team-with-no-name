@@ -17,6 +17,16 @@ def test(request:HttpRequest) -> HttpResponse:
 
     visualizations = tableau_next_api.get_visualization_collection(connection_dict=next_api_connection)
 
-    selected_viz = visualizations[len(visualizations) - 1] if visualizations else None
+    # selected_viz = visualizations[len(visualizations) - 1] if visualizations else None
 
-    return HttpResponse("This is a test page.")
+    dashboards = tableau_next_api.get_entities_through_soql(connection=next_api_connection, entity_type="AnalyticsDashboard")
+
+    selected_dashboard = dashboards[len(dashboards) - 1] if dashboards else None
+
+    viz_image_response = tableau_next_api.post_image_download(connection_dict=next_api_connection, asset=selected_dashboard, metadata_only=False)
+    viz_image_bytes = viz_image_response.get("image_bytes")
+
+    # Create a response that displays the image we just downloaded
+    response = HttpResponse(content_type="image/png")
+    response.write(viz_image_bytes)
+    return response
