@@ -26,6 +26,9 @@ def test(request:HttpRequest) -> HttpResponse:
     viz_image_response = tableau_next_api.post_image_download(connection_dict=next_api_connection, asset=selected_dashboard, metadata_only=False)
     viz_image_bytes = viz_image_response.get("image_bytes")
 
+    # Some other call
+    other_response = tableau_next_api.get_visualization_collection(connection_dict=next_api_connection)
+
     # Create a response that displays the image we just downloaded
     response = HttpResponse(content_type="image/png")
     response.write(viz_image_bytes)

@@ -4,6 +4,13 @@ This repository contains the code for **(Tableau) Next Question**, a Tableau Nex
 
 This repository is intended to serve as a reference to some of the code used, and as an example for others trying to achieve similar goals.
 
+```
+Copyright (c) 2025 [Biztory]. All rights reserved.
+
+This repository is shared for review/reference only.
+Copying, reuse, or distribution of the code or its contents  without explicit permission is prohibited.
+```
+
 ### Intention
 
 Focusing on the concept of interoperability, our intention is to showcase how Tableau Next and other Salesforce platforms can be connected, and how they can work together to provide people with a seamless experience across products.
