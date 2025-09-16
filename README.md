@@ -8,7 +8,8 @@ This repository is intended to serve as a reference to some of the code used, an
 Copyright (c) 2025 [Biztory]. All rights reserved.
 
 This repository is shared for review/reference only.
-Copying, reuse, or distribution of the code or its contents  without explicit permission is prohibited.
+Copying, reuse, or distribution of the code or its contents
+without explicit permission is prohibited.
 ```
 
 ### Intention
