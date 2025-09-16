@@ -2,6 +2,8 @@
 
 This repository contains the code for **(Tableau) Next Question**, a Tableau Next Hackathon entry by Biztory's Team With No Name.
 
+See the **[Devpost Entry](https://devpost.com/software/biztory-s-team-with-no-name)** for a full overview of the project.
+
 This repository is intended to serve as a reference to some of the code used, and as an example for others trying to achieve similar goals.
 
 ```
