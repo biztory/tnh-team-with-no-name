@@ -372,7 +372,18 @@ def rebuild_core_viz_in_next(core_viz_luid:str, kwargs:dict) -> None:
         tableau_core_viz_metadata = viz_datasources_response[0] # It is probably the first and only viz
         if len(tableau_core_viz_metadata.get("upstreamDatasources", [])) > 0:
             tableau_core_datasource_metadata = tableau_core_viz_metadata["upstreamDatasources"][0] # We take the first data source for now, further matching can take place later if we need to.
-            tableau_next_matching_semantic_model = next((model for model in all_semantic_models if model.get("label", "!") == tableau_core_datasource_metadata.get("name", "?")), None)
+            tableau_core_datasource_metadata_name = tableau_core_datasource_metadata.get("name", "?")
+            tableau_next_matching_semantic_model = next((model for model in all_semantic_models if model.get("label", "!") == tableau_core_datasource_metadata_name), None)
+            if tableau_next_matching_semantic_model is None:
+                # More "fuzzy" matching if we haven't found an exact match
+                tableau_core_datasource_metadata_name_simplified = re.sub(r"[^a-zA-Z0-9]", "", tableau_core_datasource_metadata_name).lower()
+                # For-loop to also simplify model names we match against
+                for model in all_semantic_models:
+                    model_name_simplified = re.sub(r"[^a-zA-Z0-9]", "", model.get("label", "!")).lower()
+                    if model_name_simplified == tableau_core_datasource_metadata_name_simplified or model_name_simplified in tableau_core_datasource_metadata_name_simplified or tableau_core_datasource_metadata_name_simplified in model_name_simplified:
+                        tableau_next_matching_semantic_model = model
+                        break
+
             tableau_core_source_workbook = tableau_core_viz_metadata.get("workbook", {})
 
     if tableau_next_matching_semantic_model is None:

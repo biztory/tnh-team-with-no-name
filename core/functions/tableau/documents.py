@@ -30,7 +30,7 @@ def tableau_core_field_ref_to_components(field_ref:str) -> dict:
     """
 
     try:
-        field_ref_matches = re.match(r".+\[(\w+):([\w\_\d]+):(\w+)\]", field_ref)
+        field_ref_matches = re.match(r".+\[(\w+):([\w\_\d\s]+):(\w+)\]", field_ref)
         if field_ref_matches is not None:
             field_ref_agg = field_ref_matches.groups()[0]
             field_ref_name = field_ref_matches.groups()[1]

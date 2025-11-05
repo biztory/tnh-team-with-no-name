@@ -27,10 +27,22 @@ def find_matching_field_in_semantic_model(field_name:str, semantic_model_data_ob
     """
     Find a matching field in the semantic model data object by its API name. Accounts for the fact that sometimes, Tableau Next likes to add random numeric suffixes to field API names (e.g. "last_name" could just as well be "last_name5"). In that case, it might be best to use dataObjectFieldName (without the __c suffic)
     """
-    matching_field = next((f for f in semantic_model_data_object.get("semanticDimensions", []) + semantic_model_data_object.get("semanticMeasurements", []) if f.get("apiName", "!").lower() == field_name.lower()), None)
+
+    semantic_model_search_scope = semantic_model_data_object.get("semanticDimensions", []) + semantic_model_data_object.get("semanticMeasurements", [])
+
+    matching_field = next((f for f in semantic_model_search_scope if f.get("apiName", "!").lower() == field_name.lower()), None)
     if matching_field is None:
         # Try to find a field with the same name, but with a numeric suffix
-        matching_field = next((f for f in semantic_model_data_object.get("semanticDimensions", []) + semantic_model_data_object.get("semanticMeasurements", []) if f.get("dataObjectFieldName", "!").lower().startswith(field_name.lower())), None)
+        matching_field = next((f for f in semantic_model_search_scope if f.get("dataObjectFieldName", "!").lower().startswith(field_name.lower())), None)
+    if matching_field is None:
+        # Fuzziest matching
+        field_name_simplified = re.sub(r"[^a-zA-Z0-9]", "", field_name).lower()
+        # For-loop to also simplify model names we match against
+        for field in semantic_model_search_scope:
+            sm_field_name_simplified = re.sub(r"[^a-zA-Z0-9]", "", field.get("label", "!")).lower()
+            if field_name_simplified == sm_field_name_simplified or field_name_simplified in sm_field_name_simplified or sm_field_name_simplified in field_name_simplified:
+                matching_field = field
+                break
     return matching_field
 
 def field_definition_from_semantic_model_field(semantic_model_field:dict, semantic_model_data_object:dict, aggregation:str="none") -> dict:
@@ -109,7 +121,7 @@ def process_rows_or_cols_into_definition(sheet_definition:dict, fields_counter:i
         # Core, XML
         rc_field_components = tableau_documents.tableau_core_field_ref_to_components(rc_field)
         rc_field_agg = rc_field_components.get("agg")
-        rc_field_name = rc_field_components.get("name")
+        rc_field_name = resolve_field_to_name_on_sheet(rc_field_components.get("name"), selected_worksheet_elem)
         # Find the sorts that apply to this field
         computed_sorts = get_computed_sort_from_xml(selected_worksheet_elem, field=rc_field)
         # Next, JSON/template
@@ -141,7 +153,8 @@ def process_rows_or_cols_into_definition(sheet_definition:dict, fields_counter:i
         if computed_sorts is not None:
             fields_counter += 1
             fields_key_sort = f"F{fields_counter}"
-            sm_match_for_sort = find_matching_field_in_semantic_model(computed_sorts.get("using_name"), semantic_model_data_object)
+            sort_using_name = resolve_field_to_name_on_sheet(computed_sorts.get("using_name"), selected_worksheet_elem)
+            sm_match_for_sort = find_matching_field_in_semantic_model(sort_using_name, semantic_model_data_object)
             sort_field_definition = field_definition_from_semantic_model_field(sm_match_for_sort, semantic_model_data_object, computed_sorts.get("using_agg"))
             # Add in fields ...
             sheet_definition["fields"][fields_key_sort] = sort_field_definition
@@ -153,6 +166,24 @@ def process_rows_or_cols_into_definition(sheet_definition:dict, fields_counter:i
             }
 
     return sheet_definition, fields_counter
+
+def resolve_field_to_name_on_sheet(field_reference:str, sheet_element:ET.ElementTree) -> str:
+    """
+    Some fields e.g. calculations may need to be resolved to their actual name on the sheet, as the field definition name may differ from the actual field name on the sheet (e.g. calculated fields).
+
+    For this, we use the information in worksheet -> table -> view -> datasource-dependencies.
+    """
+
+    # Calculated fields need to be resolved first
+
+    field_name = field_reference
+
+    if field_reference.startswith("Calculation_"):
+        # Find the field this is referring to, in the XML
+        calculation_column_reference = sheet_element.find(f".//column[@name='[{ field_reference }]']")
+        field_name = calculation_column_reference.attrib.get("caption", field_reference)
+
+    return field_name
 
 def process_marks_into_definition(sheet_definition:dict, fields_counter:int, selected_worksheet_elem: ET.Element, semantic_model_data_object:dict) -> Tuple[dict, int]:
     """
@@ -188,36 +219,43 @@ def process_marks_into_definition(sheet_definition:dict, fields_counter:int, sel
             marks_color_value = marks_color.attrib.get("value", "")
             if len(marks_color_value) > 0:
                 sheet_definition["visualSpecification"]["style"]["marks"]["ALL"]["color"] = { "color": marks_color_value }
-        # Color encoded with field
-        else:
-            marks_encodings = selected_worksheet_elem.find(f".//pane/encodings")
-            if marks_encodings is not None:
-                marks_encodings_color = marks_encodings.find(f".//color")
-                if marks_encodings_color is not None:
-                    marks_encodings_color_value = marks_encodings_color.attrib.get("column", "")
-                    if len(marks_encodings_color_value) > 0:
+        # Actual marks encodings with data (color, label ("text"), detail ("lod")). Others (e.g. size) to be added later.
+        marks_encodings = selected_worksheet_elem.find(f".//pane/encodings")
+        if marks_encodings is not None:
+            marks_encodings_mappings = {
+                "color": { "xml_tag_name": "color", "next_display_name": "Color" },
+                "text": { "xml_tag_name": "text", "next_display_name": "Label" },
+                "detail": { "xml_tag_name": "lod", "next_display_name": "Detail" }
+            }
+            for marks_encoding_key in marks_encodings_mappings.keys():
+                marks_encoding_info = marks_encodings_mappings[marks_encoding_key]
+                marks_encoding_elem = marks_encodings.find(f".//{ marks_encoding_info['xml_tag_name'] }")
+                if marks_encoding_elem is not None:
+                    marks_encoding_value = marks_encoding_elem.attrib.get("column", "")
+                    if len(marks_encoding_value) > 0:
                         # Interestingly, we don't need to set sheet_definition["visualSpecification"]["style"]["marks"]["ALL"]["color"]["color"]. Only add an encoding to sheet_definition["visualSpecification"]["marks"]["ALL"]["encodings"]
                         # Which field?
-                        marks_encodings_color_components = tableau_documents.tableau_core_field_ref_to_components(marks_encodings_color_value)
-                        marks_encodings_color_agg = marks_encodings_color_components.get("agg")
-                        marks_encodings_color_name = marks_encodings_color_components.get("name")
+                        marks_encoding_value_components = tableau_documents.tableau_core_field_ref_to_components(marks_encoding_value)
+                        marks_encoding_agg = marks_encoding_value_components.get("agg")
+                        marks_encoding_name = resolve_field_to_name_on_sheet(marks_encoding_value_components.get("name"), selected_worksheet_elem)
                         # We need a field definition for that
                         fields_counter += 1
-                        fields_key_color = f"F{fields_counter}"
-                        sm_match_for_color = find_matching_field_in_semantic_model(marks_encodings_color_name, semantic_model_data_object)
-                        color_field_definition = field_definition_from_semantic_model_field(sm_match_for_color, semantic_model_data_object, marks_encodings_color_agg)
+                        fields_key = f"F{fields_counter}"
+                        sm_match_for_encoding = find_matching_field_in_semantic_model(marks_encoding_name, semantic_model_data_object)
+                        encoding_field_definition = field_definition_from_semantic_model_field(sm_match_for_encoding, semantic_model_data_object, marks_encoding_agg)
                         # Add in fields ...
-                        sheet_definition["fields"][fields_key_color] = color_field_definition
+                        sheet_definition["fields"][fields_key] = encoding_field_definition
                         sheet_definition["visualSpecification"]["marks"]["ALL"]["encodings"].append({
-                            "fieldKey": fields_key_color,
-                            "type": "Color"
+                            "fieldKey": fields_key,
+                            "type": marks_encoding_info['next_display_name']
                         })
                         # Required if a measure: panes style.
-                        if color_field_definition["role"] == "Measure":
+                        if encoding_field_definition["role"] == "Measure":
                             pane_definition = copy.deepcopy(tableau_next_templates.visualization_visualspec_style_panes_template)
-                            sheet_definition["visualSpecification"]["style"]["panes"][fields_key_color] = pane_definition
+                            sheet_definition["visualSpecification"]["style"]["panes"][fields_key] = pane_definition
+
     except Exception as e:
-        log_and_display_message(f"Error processing marks color:\n\t{ e }\n\t{ traceback.format_exc() }", level="warning")
+        log_and_display_message(f"Error processing marks encodings:\n\t{ e }\n\t{ traceback.format_exc() }", level="warning")
 
     # Marks label (show, cull)
     try:
@@ -233,27 +271,6 @@ def process_marks_into_definition(sheet_definition:dict, fields_counter:int, sel
                 sheet_definition["visualSpecification"]["style"]["marks"]["ALL"]["label"]["canOverlapLabels"] = marks_label_cull_value
     except Exception as e:
         log_and_display_message(f"Error processing marks label:\n\t{ e }\n\t{ traceback.format_exc() }", level="warning")
-
-    # Extra: if mark-encodings was not None, and labels are displayed, we actually need to add that as an additional field in Tableau Next (we can't just display labels for a field that is dropped elsewhere)
-    try:
-        if marks_encodings is not None and marks_label is not None and marks_label_value:
-            # The Fn+1 we add for label, will be a copy of the Fn for color. Do we have what we need?
-            if "fields_key_color" in locals() and "color_field_definition" in locals() and color_field_definition is not None:
-                # Create a copy of the color field definition for the label
-                fields_counter += 1
-                label_field_definition = copy.deepcopy(color_field_definition)
-                sheet_definition["fields"][f"F{fields_counter}"] = label_field_definition
-            # Then, also add to visualSpecification -> marks -> ALL -> encodings
-            sheet_definition["visualSpecification"]["marks"]["ALL"]["encodings"].append({
-                "fieldKey": f"F{fields_counter}",
-                "type": "Label"
-            })
-            # Required if a measure: panes style.
-            if label_field_definition["role"] == "Measure":
-                pane_definition = copy.deepcopy(tableau_next_templates.visualization_visualspec_style_panes_template)
-                sheet_definition["visualSpecification"]["style"]["panes"][f"F{fields_counter}"] = pane_definition
-    except Exception as e:
-        log_and_display_message(f"Error processing marks label encodings:\n\t{ e }\n\t{ traceback.format_exc() }", level="warning")
 
     return sheet_definition, fields_counter
 
