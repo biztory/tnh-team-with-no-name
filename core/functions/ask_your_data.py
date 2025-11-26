@@ -442,8 +442,8 @@ def rebuild_core_viz_in_next(core_viz_luid:str, kwargs:dict) -> None:
         sheet_definition = copy.deepcopy(tableau_next_templates.visualization_template)
         # sheet_definition = copy.deepcopy(visualization_template)
         # Wire up the data source
-        sheet_definition["dataSource"]["id"] = semantic_model_data_object.get("id", "")
-        sheet_definition["dataSource"]["name"] = semantic_model_data_object.get("apiName", "")
+        sheet_definition["dataSource"]["id"] = tableau_next_matching_semantic_model.get("id", "")
+        sheet_definition["dataSource"]["name"] = tableau_next_matching_semantic_model.get("apiName", "")
         sheet_definition["dataSource"]["type"] = "SemanticModel"
 
         fields_counter = 0 # Used because we need dict keys F1, F2, etc.

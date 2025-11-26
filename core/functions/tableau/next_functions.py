@@ -1,5 +1,6 @@
 from typing import Tuple
-import copy, re
+import copy, re, datetime
+import jwt
 import traceback
 import xml.etree.ElementTree as ET
 
@@ -139,7 +140,7 @@ def process_rows_or_cols_into_definition(sheet_definition:dict, fields_counter:i
         # In style/headers (if discrete)
         if field_definition["displayCategory"] == "Discrete":
             header_definition = copy.deepcopy(tableau_next_templates.visualization_visualspec_style_headers_template)
-            sheet_definition["visualSpecification"]["style"]["headers"][fields_key] = header_definition
+            sheet_definition["visualSpecification"]["style"]["allHeaders"]["fields"][fields_key] = header_definition
         # Axis
         if field_definition["displayCategory"] == "Continuous":
             axis_definition = copy.deepcopy(tableau_next_templates.visualization_visualspec_style_axis_template)
@@ -402,9 +403,9 @@ def copy_viz_with_changes(source_viz:dict, new_name:str="Viz_Copy", new_label:st
     category_field_id = next((field_id for field_id in target_viz["fields"] if target_viz["fields"][field_id]["fieldName"] == "Category1"), None)
     # 2. Substitute that "id" reference on rows
     target_viz["visualSpecification"]["rows"] = [category_field_id]
-    # 3. Copy the headers specs for that field as it is used on rows/headers
-    target_viz["visualSpecification"]["style"]["headers"][category_field_id] = target_viz["visualSpecification"]["style"]["headers"][sub_category_field_id]
-    target_viz["visualSpecification"]["style"]["headers"].pop(sub_category_field_id, None) # Remove the old field from headers
+    # 3. Copy the allHeaders specs for that field as it is used on rows/allHeaders
+    target_viz["visualSpecification"]["style"]["allHeaders"]["fields"][category_field_id] = target_viz["visualSpecification"]["style"]["allHeaders"]["fields"][sub_category_field_id]
+    target_viz["visualSpecification"]["style"]["allHeaders"]["fields"].pop(sub_category_field_id, None) # Remove the old field from allHeaders
 
     # Drop viz definition fields that we're not supposed to provide
     # General field names to drop (we don't want those anywhere in the dictionary)
@@ -421,3 +422,31 @@ def copy_viz_with_changes(source_viz:dict, new_name:str="Viz_Copy", new_label:st
         target_viz["view"].pop(undesirable_field, None)
 
     return target_viz
+
+def generate_jwt_for_user(username:str, eca_client_id:str, eca_jwt_pk:str) -> str:
+    """
+    Generate a JWT token for a user on Tableau Next.
+    """
+
+    # About the JWT token constitution, see: https://help.salesforce.com/s/articleView?id=xcloud.remoteaccess_oauth_jwt_flow.htm&type=5
+
+    # Client ID
+
+    jwt_payload = {
+        "iss": eca_client_id,
+        "sub": username,
+        "aud": "https://login.salesforce.com",
+        "exp": datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(days=0, seconds=300) # 5 minutes from now
+    }
+    # For an ECA, Salesforce expects iss in the payload, not the header :shrug:
+    jwt_headers = {}
+
+    encoded_jwt = jwt.encode(
+        payload=jwt_payload,
+        headers=jwt_headers,
+        algorithm="RS256",
+        key=eca_jwt_pk
+    )
+
+    return encoded_jwt

@@ -40,15 +40,37 @@ visualization_template = {
         "style": {
             "axis": {},
             "fieldLabels": {
-                "columns": {"showLabels": True},
-                "rows": {"showLabels": True},
+                "columns": {
+                    "showLabels": True,
+                    "showDividerLine": False
+                },
+                "rows": {
+                    "showLabels": True,
+                    "showDividerLine": False
+                },
             },
             "fit": "Standard",
-            "headers": {},
+            "allHeaders": {
+                "fields": {},
+                "columns": {
+                    "mergeRepeatedCells": True,
+                    "showIndex": False
+                },
+                "rows": {
+                    "mergeRepeatedCells": True,
+                    "showIndex": False
+                }
+            },
             "marks": {
                 "ALL": {
                     "color": {
                         "color": ""
+                    },
+                    "isAutomaticSize": True,
+                    "size": {
+                        "isAutomatic": True,
+                        "type": "Percentage",
+                        "value": 75
                     },
                     "label": {
                         "canOverlapLabels": False,
@@ -62,7 +84,59 @@ visualization_template = {
                     },
                 }
             },
+            "lines": {
+                "axisLine": {
+                    "color": "#C9C9C9"
+                },
+                "fieldLabelDividerLine": {
+                    "color": "#C9C9C9"
+                },
+                "separatorLine": {
+                    "color": "#C9C9C9"
+                },
+                "zeroLine": {
+                    "color": "#C9C9C9"
+                }
+            },
             "panes": {},
+            "shading": {
+                "backgroundColor": "#FFFFFF",
+                "banding": {
+                    "rows": {
+                        "color": "#E5E5E5"
+                    }
+                }
+            },
+            "fonts": {
+                "actionableHeaders": {
+                    "color": "#0250D9",
+                    "size": 13
+                },
+                "axisTickLabels": {
+                    "color": "#2E2E2E",
+                    "size": 13
+                },
+                "fieldLabels": {
+                    "color": "#2E2E2E",
+                    "size": 13
+                },
+                "headers": {
+                    "color": "#2E2E2E",
+                    "size": 13
+                },
+                "legendLabels": {
+                    "color": "#2E2E2E",
+                    "size": 13
+                },
+                "markLabels": {
+                    "color": "#2E2E2E",
+                    "size": 13
+                },
+                "marks": {
+                    "color": "#2E2E2E",
+                    "size": 13
+                }
+            },
             "referenceLines": {},
             "showDataPlaceholder": False,
             "title": {"isVisible": True},

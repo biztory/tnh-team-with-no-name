@@ -9,39 +9,68 @@ from django.conf import settings
 # N/A
 # Functions
 from tableau_next_question.functions import log_and_display_message
+import core.functions.tableau.next_functions as tableau_next_functions
 
 def connect() -> dict:
+    """
+    Connect to the Tableau Next API using an ECA (External Client App). Uses the client credential flow by default, or switches to JWT Bearer Token Flow if settings/environment variables specify a SF_EXT_CLIENT_APP_USER.
+    
+    Returns a connection dictionary with session and headers.
+    """
+
+    # Hardcore-code user for testing. Yeah, "testing".
+
+    as_user = None
+    if hasattr(settings, "SF_EXT_CLIENT_APP_USER") and settings.SF_EXT_CLIENT_APP_USER and len(settings.SF_EXT_CLIENT_APP_USER.strip()) > 0:
+        as_user = settings.SF_EXT_CLIENT_APP_USER
 
     sf_ext_client_app_consumer_key = settings.SF_EXT_CLIENT_APP_CONSUMER_KEY
     sf_ext_client_app_consumer_secret = settings.SF_EXT_CLIENT_APP_CONSUMER_SECRET
     sf_ext_client_app_redirect_uri = settings.SF_EXT_CLIENT_APP_REDIRECT_URI
     sf_org_domain = settings.SF_ORG_DOMAIN
+    if as_user is not None and hasattr(settings, "SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK"):
+        sf_ext_client_app_jwt_certificate_pk = settings.SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK
     # sf_connect_user_username = os.getenv("sf_connect_user_username")
     # sf_connect_user_password = os.getenv("sf_connect_user_password")
 
     log_and_display_message(f"Salesforce External Client App Consumer Key: { sf_ext_client_app_consumer_key }\nSalesforce Org Domain: { sf_org_domain }\n")
 
-    # Step 1: Authenticate using JWT Bearer Token Flow
-    log_and_display_message("Authenticating using JWT Bearer Token Flow...")
+    if as_user is None:
 
-    response = requests.post(
-        f"{sf_org_domain}services/oauth2/token",
-        data={
-            "grant_type": "client_credentials",
-            "client_id": sf_ext_client_app_consumer_key,
-            "client_secret": sf_ext_client_app_consumer_secret,
-        },
-    )
+        # Step 1: Authenticate using Client Credentials flow
+        log_and_display_message("Authenticating using Client Credentials flow, and thus the default Run As user...")
+
+        response = requests.post(
+            f"{sf_org_domain}services/oauth2/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": sf_ext_client_app_consumer_key,
+                "client_secret": sf_ext_client_app_consumer_secret,
+            },
+        )
+
+    else:
+
+        log_and_display_message(f"Authenticating using JWT Bearer Token flow as user { as_user }...")
+        user_jwt = tableau_next_functions.generate_jwt_for_user(username=as_user, eca_client_id=sf_ext_client_app_consumer_key, eca_jwt_pk=sf_ext_client_app_jwt_certificate_pk)
+        request_url = f"{ sf_org_domain }services/oauth2/token"
+        request_data = {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": user_jwt,
+            "format": "json"
+        }
+
+        response = requests.post(url=request_url, data=request_data)
 
     if response.status_code != 200:
         log_and_display_message(f"Error: {response.status_code} - {response.text}")
         return {}
-
+    
     response_data = response.json()
     access_token = response_data.get("access_token")
     instance_url = response_data.get("instance_url")
     
-    connect_api_base_url = f"{instance_url}/services/data/v64.0"
+    connect_api_base_url = f"{instance_url}/services/data/v65.0"
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",

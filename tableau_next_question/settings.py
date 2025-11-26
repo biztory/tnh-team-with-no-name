@@ -10,7 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-import os
+import os, base64
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -184,6 +184,11 @@ SLACK_EVENTS_API_VERIFICATION_TOKEN = os.getenv("SLACK_EVENTS_API_VERIFICATION_T
 SF_EXT_CLIENT_APP_CONSUMER_KEY = os.getenv("SF_EXT_CLIENT_APP_CONSUMER_KEY", "")
 SF_EXT_CLIENT_APP_CONSUMER_SECRET = os.getenv("SF_EXT_CLIENT_APP_CONSUMER_SECRET", "")
 SF_EXT_CLIENT_APP_REDIRECT_URI = os.getenv("SF_EXT_CLIENT_APP_REDIRECT_URI", "")
+
+SF_EXT_CLIENT_APP_USER = os.getenv("SF_EXT_CLIENT_APP_USER", "")
+SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK_BASE64 = os.getenv("SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK_BASE64", "")
+if SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK_BASE64 and len(SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK_BASE64.strip()) > 0:
+    SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK = base64.b64decode(SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK_BASE64).decode("utf-8") if SF_EXT_CLIENT_APP_JWT_CERTIFICATE_PK_BASE64 else ""
 SF_ORG_DOMAIN = os.getenv("SF_ORG_DOMAIN", "")
 
 # Tableau REST API
